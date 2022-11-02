@@ -76,9 +76,10 @@ getopts('m:c:a:gd', \%opts) or die $usage;
 die $usage unless @ARGV;
 
 # generate a MAC address from the provided disk paths
-my $mac = substr(md5(join '\0', @ARGV), -6);
-substr($mac,0,1) &= "\xfe"; # clear the reserved multicast bit
-$mac = join ':', map { sprintf "%02x", $_ } unpack 'C*', $mac;
+my @mac = unpack 'C6', substr(md5(join '\0', @ARGV), -6);
+# see: https://www.rfc-editor.org/rfc/rfc7042#section-2.1
+$mac[0] = ($mac[0] & ~1) | 2; # set Local and clear Group bits
+my $mac = join ':', unpack 'H2' x 6, pack 'C*', @mac;
 
 my %config = (
 	MEM => $opts{m},
