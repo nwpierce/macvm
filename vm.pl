@@ -13,6 +13,11 @@ use File::Which qw(which);
 use Getopt::Std qw(getopts);
 use POSIX qw(uname dup dup2);
 
+my %accel = (
+	darwin => 'hvf',
+	linux => 'kvm',
+);
+
 my %arches = (
 	qemu => {
 		'arm64', 'aarch64',
@@ -86,11 +91,12 @@ my %config = (
 	CORES => $opts{c},
 	ARCH => $opts{a},
 	MAC => $mac,
+	ACCEL => $accel{$^O},
 );
 
 my @cmd = grep { length } map { s/%(\w+)%/$config{$1}/g; $_; } split /\s+/, q{
 	qemu-system-%ARCH%
-	-accel hvf
+	-accel %ACCEL%
 	-cpu host
 	-echr 7
 	-m %MEM%
