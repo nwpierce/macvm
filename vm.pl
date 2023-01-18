@@ -11,7 +11,7 @@ use File::Basename qw(dirname);
 use File::Temp;
 use File::Which qw(which);
 use Getopt::Std qw(getopts);
-use POSIX qw(uname dup dup2);
+use POSIX qw(uname dup dup2 pipe waitpid setsid ttyname);
 
 my %accel = (
 	darwin => 'hvf',
@@ -144,7 +144,7 @@ if($opts{a} eq 'aarch64'){
 
 	dup2($stdout, 1);
 	POSIX::close($stdout);
-}	
+}
 
 my $i = 0;
 foreach my $disk (@ARGV){
@@ -174,5 +174,36 @@ if($opts{d}){
 	}
 	exit 1;
 }
-exec { $cmd[0] } @cmd or die @cmd;
+
+my ($r, $w) = pipe or die $!;
+open(my $fh, ">&=$w") or die $!;
+fcntl($fh, F_SETFD, 0) or die $!;
+
+my $spid = fork // die $!;
+if($spid){
+	die $! if -1 == waitpid($spid, 0);
+}else{
+	my @cmd = qw(stty -g);
+	dup2($w, 1);
+	exec { $cmd[0] } @cmd or die;
+}
+
+my $tty = ttyname(0) or die $!;
+my $mpid = fork // die $!;
+my $shell = getppid;
+if($mpid){
+	exec { $cmd[0] } @cmd or die @cmd;
+}else{
+	close $fh;
+	open($fh, "<&=$r") or die $!;
+	local $/;
+	my $data = <$fh>;
+	chomp $data;
+	my @cmd = ('stty', $data);
+	setsid;
+	undef $fh;
+	open $fh, '<', $tty or die;
+	kill 'WINCH', $shell;
+	exec { $cmd[0] } @cmd;
+}
 __DATA__
